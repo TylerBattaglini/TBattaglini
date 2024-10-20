@@ -1,0 +1,323 @@
+---
+title: "Factors Influence NFL Field Goals"
+author: 'Tyler Battaglini'
+date: "2024-10-11"
+output:
+  word_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    keep_md: yes
+  html_document: 
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    fig_width: 4
+    fig_caption: yes
+    number_sections: yes
+    toc_collapsed: yes
+    code_folding: hide
+    code_download: yes
+    smooth_scroll: yes
+    theme: lumen
+  pdf_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    number_sections: yes
+    fig_width: 3
+    fig_height: 3
+editor_options: 
+  chunk_output_type: inline
+always_allow_html: true
+---
+
+```{=html}
+
+<style type="text/css">
+
+/* Cascading Style Sheets (CSS) is a stylesheet language used to describe the presentation of a document written in HTML or XML. it is a simple mechanism for adding style (e.g., fonts, colors, spacing) to Web documents. */
+
+h1.title {  /* Title - font specifications of the report title */
+  font-size: 24px;
+  font-weight: bold;
+  color: DarkRed;
+  text-align: center;
+  font-family: "Gill Sans", sans-serif;
+}
+h4.author { /* Header 4 - font specifications for authors  */
+  font-size: 20px;
+  font-weight: bold;
+  font-family: system-ui;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - font specifications for the date  */
+  font-size: 18px;
+  font-weight: bold;
+  font-family: system-ui;
+  color: DarkBlue;
+  text-align: center;
+}
+h1 { /* Header 1 - font specifications for level 1 section title  */
+    font-size: 22px;
+    font-weight: bold;
+    font-family: system-ui;
+    color: navy;
+    text-align: left;
+}
+h2 { /* Header 2 - font specifications for level 2 section title */
+    font-size: 20px;
+    font-weight: bold;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+}
+
+h3 { /* Header 3 - font specifications of level 3 section title  */
+    font-size: 18px;
+    font-weight: bold;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+}
+
+h4 { /* Header 4 - font specifications of level 4 section title  */
+    font-size: 18px;
+    font-weight: bold;
+    font-family: "Times New Roman", Times, serif;
+    color: darkred;
+    text-align: left;
+}
+
+body { background-color:white; }
+
+.highlightme { background-color:yellow; }
+
+p { background-color:white; }
+
+</style>
+```
+
+```{r setup, include=FALSE}
+# Detect, install and load packages if needed.
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+if (!require("MASS")) {
+   install.packages("MASS")
+   library(MASS)
+}
+if (!require("nleqslv")) {
+   install.packages("nleqslv")
+   library(nleqslv)
+}
+#
+if (!require("pander")) {
+   install.packages("pander")
+   library(pander)
+}
+
+if (!require("psych")) {   
+  install.packages("psych")
+   library(psych)
+}
+if (!require("MASS")) {   
+  install.packages("MASS")
+   library(MASS)
+}
+if (!require("ggplot2")) {   
+  install.packages("ggplot2")
+   library(ggplot2)
+}
+if (!require("GGally")) {   
+  install.packages("GGally")
+   library(GGally)
+}
+if (!require("car")) {   
+  install.packages("car")
+   library(car)
+}
+if (!require("dplyr")) {   
+  install.packages("dplyr")
+   library(dplyr)
+}
+if (!require("caret")) {   
+  install.packages("caret")
+   library(caret)
+}
+
+# specifications of outputs of code in code chunks
+knitr::opts_chunk$set(echo = TRUE,      # include code chunk in the output file
+                      warnings = FALSE,  # sometimes, you code may produce warning messages,
+                                         # you can choose to include the warning messages in
+                                         # the output file. 
+                      messages = FALSE,  #
+                      results = TRUE,
+                      
+                      comment = NA       # you can also decide whether to include the output
+                                         # in the output file.
+                      )   
+```
+
+# Introduction
+
+### Description
+In this data set we have data from the 2008 NFL season. More specifically we have factors that go into NFL fielgoals. Some variables include the kicking team, Name, Distance, timerem, defscore, and GOOD.
+
+Kickteam - Name of the kicking team 
+Name - Name of the kicker
+Distance - How far the ball is from the goal
+Timerem - How much time is on the game clock remaining in the game
+Kickdiff - the level of difficulty of the kick
+Defscore- The score of the opposing team
+GOOD - If the field goal is made or not, a 1 for a make and 0 for a miss
+
+### Question
+
+The objective of this analysis is to build a logistic regression model to predict a made field goal using diffrent factors tat go into a make.
+
+### Data Cleaning
+
+```{r}
+
+fieldgoals <- read.csv("https://raw.githubusercontent.com/TylerBattaglini/STA-321/refs/heads/main/nfl2008_fga.csv", header = TRUE)
+
+```
+
+```{r}
+clean_fieldgoals <- na.omit(fieldgoals)
+clean_fieldgoals <- clean_fieldgoals %>% select(-GameDate, -AwayTeam, -HomeTeam, -qtr, -min, -sec, -def, -down, -togo, -kicker, -ydline, -homekick, -offscore, -season, -Missed, -Blocked, -kickteam, -name)
+
+head(clean_fieldgoals)
+```
+
+We take out any observations with a missing value. We also take out many variables due to there being a high likeleyhood for multicollineairty. We already have a variable for time so we eliminated many variables related to time. We also already have a variable for a make so we do not need any for a miss or blocked, that would just be a repeat our data. The others are just categorical variables that are to identify the kicker or kicking team which again we already have variables that describe that. 
+
+```{r}
+library(psych)
+pairs.panels(clean_fieldgoals[,-9], 
+             method = "pearson",
+             hist.col = "#00AFBB",
+             density = TRUE,
+             ellipses = TRUE
+             )
+```
+All of our predictor values are unimodal except for defscore. 
+
+```{r}
+par(mfrow=c(1,2))
+hist(clean_fieldgoals$defscore, xlab="defscore", main = "")
+
+```
+
+Based on the histogram above we discretize defscore
+
+```{r}
+defscore = clean_fieldgoals$defscore
+grp.defscore = defscore
+grp.defscore[defscore %in% c(0:10)] = "1-10"
+grp.defscore[defscore %in% c(11:18)] = "11-18"
+grp.defscore[defscore %in% c(19:26)] = "19-26"
+grp.defscore[defscore %in% c(27:99)] = "27+"
+clean_fieldgoals$grp.defscore = grp.defscore
+head(grp.defscore)
+```
+
+There is some correlation between the variables kickdiff vs defscore and kickdiff vs timerem. 
+
+In our smallest and final model we want to have kick difficulty, distance, time remaining because we know distance is a big indicator on whether or not a field goal is good or not and the same goes for kick difficulty and time remaining.
+
+# Introduction
+
+### Standardizing Numerical Variables
+
+We first standardize our numerical values because we do not care about the interpretaion of the coefficients only to identify the best model.
+
+```{r}
+clean_fieldgoals$sd.distance = (clean_fieldgoals$distance-mean(clean_fieldgoals$distance))/sd(clean_fieldgoals$distance)
+clean_fieldgoals$sd.kickdiff = (clean_fieldgoals$kickdiff-mean(clean_fieldgoals$kickdiff))/sd(clean_fieldgoals$kickdiff)
+clean_fieldgoals$sd.timerem = (clean_fieldgoals$timerem-mean(clean_fieldgoals$timerem))/sd(clean_fieldgoals$timerem)
+clean_fieldgoals$sd.defscore = (clean_fieldgoals$defscore-mean(clean_fieldgoals$defscore))/sd(clean_fieldgoals$defscore)
+
+sd.GOOD = clean_fieldgoals[, -(1:4)]
+
+```
+
+### Data Split
+
+We randomly split the data into two sets one with 80% of the data which is used as a training data. We then use the other 20% to assess the performance of the model
+
+```{r}
+n <- dim(sd.GOOD)[1]
+train.n <- round(0.8*n)
+train.id <- sample(1:n, train.n, replace = FALSE)
+train <- sd.GOOD[train.id, ]
+test <- sd.GOOD[-train.id, ]
+
+```
+
+We will use a 5-fold cross validation to make sure we have enough ield goal data.
+
+```{r}
+k=5
+fold.size = floor(dim(train)[1]/k)
+PE1 = rep(0,5)
+PE2 = rep(0,5)
+PE3 = rep(0,5)
+
+for(i in 1:k) {
+  valid.id = (fold.size*(i-1)+1):(fold.size*i)
+  valid = train[valid.id, ]
+  train.dat = train[-valid.id,]
+  
+  candidate01 = glm(GOOD ~ sd.distance + sd.kickdiff + sd.timerem + 
+                    grp.defscore, family = binomial(link = "logit"),  
+                    data = train.dat)  
+
+  candidate03 = glm(GOOD ~ sd.distance + grp.defscore + sd.timerem, 
+                    family = binomial(link = "logit"),  
+                    data = train.dat) 
+
+  candidate02 = stepAIC(candidate01, 
+                        scope = list(lower=formula(candidate03),upper=formula(candidate01)),
+                        direction = "forward",   
+                        trace = 0)
+  
+  pred01 = predict(candidate01, newdata = valid, type="response")
+  pred02 = predict(candidate02, newdata = valid, type="response")
+  pred03 = predict(candidate03, newdata = valid, type="response")
+  
+  pre.outcome01 = ifelse(as.vector(pred01) > 0.5, 1, 0)
+  pre.outcome02 = ifelse(as.vector(pred02) > 0.5, 1, 0)
+  pre.outcome03 = ifelse(as.vector(pred03) > 0.5, 1, 0)
+
+  PE1[i] = sum(pre.outcome01 == valid$GOOD)/length(pred01)
+  PE2[i] = sum(pre.outcome02 == valid$GOOD)/length(pred02)
+  PE3[i] = sum(pre.outcome03 == valid$GOOD)/length(pred03)
+}
+
+avg.pe = cbind(PE1 = mean(PE1), PE2 = mean(PE2), PE3 = mean(PE3))
+kable(avg.pe, caption = "Average of prediction errors of candidate models")
+
+```
+
+From our output above we see that models one and two have the same predictive error. Since model 2 is a simplified model we choose model 2. We have a cutoff of .5 so our predicitve error of .869 is well above our cutoff.
+
+## Final Model
+
+```{r}
+pred02 = predict(candidate02, newdata = test, type="response")
+pred02.outcome = ifelse(as.vector(pred02)>0.5, "1", "0")
+
+accuracy = sum(pred02.outcome == test$GOOD)/length(pred02)
+kable(accuracy, caption="The actual accuracy of the final model")
+
+```
+
+From the output above we obsevere the withheld test data. We get a accuracy rate of .841.
+
+# Conclusion
+
+This analysis was on predicting a made field goal. We used three models as candiates for our final model and we used cross validation. Our final result for the accuracy of our final model was apporoximatley 84.06, which shows that the model correctly showed 84% of the test data based on the predicted probabilites and our chosen threshold of .5. An accuracy of 84.06% shows that the model is perfomroing relatively well, it succesfully identified whether an observation falls into the classes made ("1") or miss ("0") for 84% of the cases.
