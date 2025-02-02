@@ -1,0 +1,59 @@
+NOTE: Copyright (c) 2002-2012 by SAS Institute Inc., Cary, NC, USA.
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M0)
+      Licensed to WEST CHESTER UNIVERSITY - T&R SFA, Site 70149859.
+NOTE: This session is executing on the X64_SRV12  platform.
+
+
+
+NOTE: Updated analytical products:
+
+      SAS/STAT 12.3 (maintenance)
+      SAS/ETS 12.3 (maintenance)
+      SAS/OR 12.3 (maintenance)
+      SAS/IML 12.3 (maintenance)
+      SAS/QC 12.3 (maintenance)
+
+NOTE: Additional host information:
+
+ X64_SRV12 WIN 6.2.9200  Server
+
+NOTE: SAS initialization used:
+      real time           3.54 seconds
+      cpu time            2.14 seconds
+
+NOTE: Unable to open SASUSER.REGSTRY. WORK.REGSTRY will be opened instead.
+NOTE: All registry changes will be lost at the end of the session.
+WARNING: Unable to copy SASUSER registry to WORK registry. Because of this,
+WARNING: you will not see registry customizations during this session.
+NOTE: Unable to open SASUSER.PROFILE. WORK.PROFILE will be opened instead.
+NOTE: All profile changes will be lost at the end of the session.
+NOTE: This SAS session is using a registry in WORK.  All changes will be lost at the end of this
+NOTE: session.
+NOTE: Unable to open SASUSER.PROFILE. WORK.PROFILE will be opened instead.
+NOTE: All profile changes will be lost at the end of the session.
+
+1    libname mysetsll 'I:\STA 311';
+NOTE: Libref MYSETSLL was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: I:\STA 311
+2    data mysets11;
+3    set mysetsll.Crq_best;
+4    run;
+
+NOTE: There were 366 observations read from the data set MYSETSLL.CRQ_BEST.
+NOTE: The data set WORK.MYSETS11 has 366 observations and 116 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.07 seconds
+      cpu time            0.03 seconds
+
+
+5
+6    proc contents data=mysetsll.Crq_fath;
+NOTE: Writing HTML Body file: sashtml.htm
+7    quit;
+
+NOTE: PROCEDURE CONTENTS used (Total process time):
+      real time           1.17 seconds
+      cpu time            0.67 seconds
+
+
