@@ -1,0 +1,268 @@
+---
+title: "Houston Weather Predictions"
+subtitle: "&#127774;Time Series Model"  
+author: "Tyler Battaglini"
+date: '`r Sys.Date()`'
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    nature:
+      slideNumberFormat: "%current%"
+      highlightStyle: github
+      highlightLines: true
+      ratio: 16:9
+      countIncrementalSlides: true
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(
+  fig.width=9, fig.height=3.5, fig.retina=3,
+  out.width = "100%",
+  cache = FALSE,
+  echo = TRUE,
+  message = FALSE, 
+  warning = FALSE,
+  hiline = TRUE
+)
+
+# Detect, install and load packages if needed.
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+if (!require("MASS")) {
+   install.packages("MASS")
+   library(MASS)
+}
+if (!require("nleqslv")) {
+   install.packages("nleqslv")
+   library(nleqslv)
+}
+#
+if (!require("pander")) {
+   install.packages("pander")
+   library(pander)
+}
+
+if (!require("psych")) {   
+  install.packages("psych")
+   library(psych)
+}
+if (!require("MASS")) {   
+  install.packages("MASS")
+   library(MASS)
+}
+if (!require("ggplot2")) {   
+  install.packages("ggplot2")
+   library(ggplot2)
+}
+if (!require("GGally")) {   
+  install.packages("GGally")
+   library(GGally)
+}
+if (!require("car")) {   
+  install.packages("car")
+   library(car)
+}
+if (!require("dplyr")) {   
+  install.packages("dplyr")
+   library(dplyr)
+}
+if (!require("caret")) {   
+  install.packages("caret")
+   library(caret)
+}
+if (!require("readxl")) {   
+  install.packages("readxl")
+   library(readxl)
+}
+if (!require("openxlsx")) {   
+  install.packages("openxlsx")
+   library(openxlsx)
+}
+if (!require("forecast")) {   
+  install.packages("forecast")
+   library(forecast)
+}
+# specifications of outputs of code in code chunks
+knitr::opts_chunk$set(echo = TRUE,      # include code chunk in the output file
+                      warnings = FALSE,  # sometimes, you code may produce warning messages,
+                                         # you can choose to include the warning messages in
+                                         # the output file. 
+                      messages = FALSE,  #
+                      results = TRUE,
+                      
+                      comment = NA       # you can also decide whether to include the output
+                                         # in the output file.
+                      )   
+```
+
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_duo_accent(
+  primary_color = "#1381B0",
+  secondary_color = "#FF961C",
+  inverse_header_color = "#FFFFFF"
+)
+```
+
+## Agenda
+
+<ul style="font-size: 1.5em;">
+  <li>Exploratory Data Analysis
+    <ul>
+      <li>Data Cleaning</li>
+      <li>Accuracy Measure</li>
+    </ul>
+  </li>
+  <li>Visualization
+    <ul>
+      <li>Model of Original Time Series</li>
+      <li>Model of Forecasted Results</li>
+    </ul>
+  </li>
+  <li>Final Model</li>
+</ul>
+
+---
+
+## Exploratory Data Analysis
+
+- Focus on the last 150 observations, split into 138 training and 12 test data points, with the training set converted to a monthly time series.
+- Fit 8 different models to identify the best fit for the data.
+
+```{r include=FALSE}
+
+if (!requireNamespace("kableExtra", quietly = TRUE)) install.packages("kableExtra")
+library(kableExtra)
+
+weather <- read.csv("https://raw.githubusercontent.com/TylerBattaglini/STA-321/refs/heads/main/houston_weather.csv")
+
+weather_subset <- tail(weather, 150)
+train.weath = weather_subset$meanTemp[1:138]
+test.weath = weather_subset$meanTemp[139:150]
+
+weath = ts(train.weath, start=c(2000, 1), frequency=12)
+
+fit1 = ses(weath, h=12)
+fit2 = holt(weath, initial="optimal", h=12)
+fit3 = holt(weath, damped=TRUE, h=12)
+fit4 = holt(weath, exponential=TRUE, damped=TRUE, h=12)
+fit5 = hw(weath, h=12, seasonal="additive")
+fit6 = hw(weath, h=12, seasonal="multiplicative")
+fit7 = hw(weath, h=12, seasonal="additive", damped=TRUE)
+fit8 = hw(weath, h=12, seasonal="multiplicative", damped=TRUE)
+
+```
+
+```{r include=FALSE}
+accuracy.table = round(rbind(accuracy(fit1), accuracy(fit2), accuracy(fit3), accuracy(fit4),
+                             accuracy(fit5), accuracy(fit6), accuracy(fit7), accuracy(fit8)),4)
+row.names(accuracy.table)=c("SES","Holt Linear","Holt Add. Damped", "Holt Exp. Damped",
+                            "HW Add.","HW Exp.","HW Add. Damp", "HW Exp. Damp")
+kable(accuracy.table, caption = "The accuracy measures of various exponential smoothing models 
+      based on the training data")
+
+```
+
+```{r echo=FALSE}
+# Load necessary libraries
+library(kableExtra)
+
+# Create and style the table
+kable(accuracy.table, caption = "Accuracy Measures for Exponential Smoothing Models") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "#1381B0") %>%
+  row_spec(0, bold = TRUE, font_size = 14)
+
+```
+
+
+---
+## Visualization
+
+```{r echo=FALSE, fig.align='center', fig.width=9, fig.height=4.5, fig.cap="Comparing exponential smoothing models."}
+par(mfrow=c(1,2), mar=c(3,3,2,1))  # Reduced top margin and figure height
+
+pred.id = 139:150
+
+# First Plot - Non-seasonal Models
+plot(1:138, train.weath, lwd=2, type="o", ylab="Mean Temp", xlab="", 
+     xlim=c(1,160), ylim=c(30, 90), cex=0.3, main="Non-seasonal Smoothing Models")
+lines(pred.id, fit1$mean, col="red")
+lines(pred.id, fit2$mean, col="blue")
+lines(pred.id, fit3$mean, col="purple")
+lines(pred.id, fit4$mean, col="navy")
+
+points(pred.id, fit1$mean, pch=16, col="red", cex=0.5)
+points(pred.id, fit2$mean, pch=17, col="blue", cex=0.5)
+points(pred.id, fit3$mean, pch=19, col="purple", cex=0.5)
+points(pred.id, fit4$mean, pch=21, col="navy", cex=0.5)
+
+legend("bottomright", lty=1, col=c("red","blue","purple", "navy"), pch=c(16,17,19,21),
+       legend=c("SES","Holt Linear","Holt Linear Damped", "Holt Multiplicative Damped"), 
+       cex=0.7, bty="n")
+
+# Second Plot - Seasonal Models
+plot(1:138, train.weath, lwd=2, type="o", ylab="Mean Temp", xlab="", 
+     xlim=c(1,160), ylim=c(30, 90), cex=0.3, main="HW Trend and Seasonal Smoothing Models")
+lines(pred.id, fit5$mean, col="red")
+lines(pred.id, fit6$mean, col="blue")
+lines(pred.id, fit7$mean, col="purple")
+lines(pred.id, fit8$mean, col="navy")
+
+points(pred.id, fit5$mean, pch=16, col="red", cex=0.5)
+points(pred.id, fit6$mean, pch=17, col="blue", cex=0.5)
+points(pred.id, fit7$mean, pch=19, col="purple", cex=0.5)
+points(pred.id, fit8$mean, pch=21, col="navy", cex=0.5)
+
+legend("bottomright", lty=1, col=c("red","blue","purple", "navy"), pch=c(16,17,19,21),
+       legend=c("HW Additive","HW Multiplicative","HW Additive Damped", "HW Multiplicative Damped"), 
+       cex=0.7, bty="n")
+```
+
+---
+
+## Final Model 
+
+```{r include=FALSE}
+
+acc.fun = function(test.data, mod.obj){
+  PE=100*(test.data-mod.obj$mean)/mod.obj$mean
+  MAPE = mean(abs(PE))
+  ###
+  E=test.data-mod.obj$mean
+  MSE=mean(E^2)
+  ###
+  accuracy.metric=c(MSE=MSE, MAPE=MAPE)
+  accuracy.metric
+}
+
+
+
+```
+
+- HW.Add is the best model with lowest values
+- Estimated values of the smoothing parameters in HW. Add
+  - alpha -	0.1305680, beta	0.0001000, gamma	0.0001006
+
+```{r echo=FALSE}
+
+pred.accuracy = rbind(SES = acc.fun(test.data = test.weath, mod.obj = fit1),
+                      Holt.Add = acc.fun(test.data = test.weath, mod.obj = fit2),
+                      Holt.Add.Damp = acc.fun(test.data = test.weath, mod.obj = fit3),
+                      Holt.Exp = acc.fun(test.data = test.weath, mod.obj = fit4),
+                      HW.Add = acc.fun(test.data = test.weath, mod.obj = fit5),
+                      HW.Exp = acc.fun(test.data = test.weath, mod.obj = fit6),
+                      HW.Add.Damp = acc.fun(test.data = test.weath, mod.obj = fit7),
+                      HW.Exp.Damp = acc.fun(test.data = test.weath, mod.obj = fit8))
+
+kable(pred.accuracy, caption = "Final Accuracy Measures") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "#1381B0") %>%
+  column_spec(2, color = "black", background = "#E2EAF0") %>%
+  row_spec(0, bold = TRUE, font_size = 14, color = "white", background = "#2C3E50") %>%
+  add_header_above(c("Model Accuracy" = 2, "MSE" = 1))
+```
+
