@@ -1,0 +1,777 @@
+---
+title: "Factors Influencing Golf Earnings"
+subtitle: "Linear Regression"  
+author: "Tyler Battaglini & Ryan Lebo"
+date: '`r Sys.Date()`'
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    nature:
+      slideNumberFormat: "%current%"
+      highlightStyle: github
+      highlightLines: true
+      ratio: 16:9
+      countIncrementalSlides: true
+---
+
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(
+  fig.width=9, fig.height=3.5, fig.retina=3,
+  out.width = "100%",
+  cache = FALSE,
+  echo = TRUE,
+  message = FALSE, 
+  warning = FALSE,
+  hiline = TRUE
+)
+
+# Detect, install and load packages if needed.
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+if (!require("MASS")) {
+   install.packages("MASS")
+   library(MASS)
+}
+if (!require("nleqslv")) {
+   install.packages("nleqslv")
+   library(nleqslv)
+}
+#
+if (!require("pander")) {
+   install.packages("pander")
+   library(pander)
+}
+
+if (!require("psych")) {   
+  install.packages("psych")
+   library(psych)
+}
+if (!require("MASS")) {   
+  install.packages("MASS")
+   library(MASS)
+}
+if (!require("ggplot2")) {   
+  install.packages("ggplot2")
+   library(ggplot2)
+}
+if (!require("GGally")) {   
+  install.packages("GGally")
+   library(GGally)
+}
+if (!require("car")) {   
+  install.packages("car")
+   library(car)
+}
+if (!require("dplyr")) {   
+  install.packages("dplyr")
+   library(dplyr)
+}
+if (!require("caret")) {   
+  install.packages("caret")
+   library(caret)
+}
+if (!require("readxl")) {   
+  install.packages("readxl")
+   library(readxl)
+}
+if (!require("openxlsx")) {   
+  install.packages("openxlsx")
+   library(openxlsx)
+}
+if (!require("forecast")) {   
+  install.packages("forecast")
+   library(forecast)
+}
+# specifications of outputs of code in code chunks
+knitr::opts_chunk$set(echo = TRUE,      # include code chunk in the output file
+                      warnings = FALSE,  # sometimes, you code may produce warning messages,
+                                         # you can choose to include the warning messages in
+                                         # the output file. 
+                      messages = FALSE,  #
+                      results = TRUE,
+                      
+                      comment = NA       # you can also decide whether to include the output
+                                         # in the output file.
+                      )   
+```
+
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_duo_accent(
+  primary_color = "#1381B0",
+  secondary_color = "#FF961C",
+  inverse_header_color = "#FFFFFF"
+)
+```
+
+
+<!-- every new slide is created under three dashes (---) -->
+
+<!-- (<h1) makes the title for the slide -->
+
+<h1 align="center"> Table of Contents</h1>
+<BR>
+
+
+.pull-left[
+- Introduction
+- Variables
+- Research Question
+- Exploratory Data Analysis
+- Linear Model
+- Log Model
+- Bootstrapping
+- Model Selection
+- Conclusion
+
+
+
+]
+
+
+
+
+
+---
+
+<h1 align = "center"> Introduction <font color="orange"></font></h1>
+<BR>
+.pull-left[
+- PGA 2004 data set (196 participants)
+- What is the PGA?
+- Data set provides (earnings and player stats)
+
+]
+
+
+
+
+
+---
+<h1 align = "center"> Variables <font color="orange"></font></h1>
+<BR>
+
+.pull-left[
+- Name
+- Age
+- Avg Drive
+- Driving Accuracy
+- Greens in Regulation
+- Avg Number of Putts
+
+]
+
+.pull-right[
+- Save Percentage
+- Money Rank
+- Number of Events
+- Total Winnings
+- Average Winnings
+
+]
+
+---
+<h1 align = "center"> Research Question <font color="orange"></font></h1>
+<BR>
+
+- What variables affect the players winnings of this given season?
+- Looking at average drive vs earnings
+
+
+---
+## Exploratory Data Analysis
+
+- Check for high correlation
+- Take out missing observations
+- Remove some variables
+
+
+```{r include=FALSE}
+url <- "https://users.stat.ufl.edu/~winner/data/pga2004.dat"
+pga_data <- read.table(url, header = FALSE, fill = TRUE)
+pga_data$V1 <- NULL
+colnames(pga_data) <- c("Player_name", "Player_Age", "Average_Drive", "Driving_Accuracy", "Greens_on_reg", 
+                        "Average_number_putts", "Save_Percent", "Money_Rank",
+                        "Number_events", "Total_Winnings", "Average_Winnings")
+colSums(is.na(pga_data))
+pga_data_clean <- na.omit(pga_data)
+ggplot(pga_data_clean, aes(x = Average_Drive, y = Average_Winnings)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "green") +
+  labs(title = "Scatter Plot of Average Drive vs. Average Winnings", x = "Average Drive", y = "Average Winnings")
+str(pga_data_clean)
+remove_low_drives <- function(pga_data_clean) {
+  filtered_data <- pga_data_clean %>%
+    filter(Average_Drive >= 150)
+  
+  return(filtered_data)
+}
+pga_data_filtered <- remove_low_drives(pga_data_clean)
+```
+
+```{r echo=FALSE, fig.width=7, fig.height=4, out.width='80%'}
+ggplot(pga_data_filtered, aes(x = Average_Drive, y = Average_Winnings)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "green") +
+  labs(
+    title = "Scatter Plot of Average Drive vs. Average Winnings (Filtered)",
+    x = "Average Drive",
+    y = "Average Winnings"
+  ) +
+  theme_minimal() 
+```
+
+---
+<h1 align = "center"> Linear Model <font color="orange"></font></h1>
+<BR>
+
+
+- Non-normal distribution
+- Several Outliers
+- Non-constant variance
+
+
+```{r include=FALSE, fig.width=4, fig.height=2}
+pga_data_filtered$Age_Above_30 <- pga_data_filtered$Player_Age > 30
+
+head(pga_data_filtered$Age_Above_30)
+pga_data_filtered <- pga_data_filtered %>% select(-Player_name, -Driving_Accuracy, -Total_Winnings, -Average_number_putts, -Money_Rank, -Player_Age)
+kable(head(pga_data_filtered))
+
+# Standardizing Average_Winnings using z-scores
+pga_data_filtered$Standardized_Winnings <- scale(pga_data_filtered$Average_Winnings)
+
+# Updating the multiple regression model with standardized winnings
+full.model<- lm(Standardized_Winnings ~ Average_Drive + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, 
+                          data = pga_data_filtered)
+
+# Summary of the updated model
+summary(full.model)
+
+```
+
+
+```{r echo=FALSE, fig.width=4, fig.height=2}
+par(mfrow=c(1,3))
+plot(full.model)
+
+```
+
+---
+
+<h1 align = "center"> Linear Model Cont. <font color="orange"></font></h1>
+<BR>
+
+.pull-left[
+
+- All below 5
+- Little to no multicollinearity
+
+]
+
+---
+## 
+
+<div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 50px;">
+  Box-Cox Transformation
+</div>
+
+---
+## Box-Cox Transformation
+
+- All the lambda values are close to 0
+- Proceed with log transformation
+
+
+```{r include=FALSE}
+url <- "https://users.stat.ufl.edu/~winner/data/pga2004.dat"
+pga_data <- read.table(url, header = FALSE, fill = TRUE)
+pga_data$V1 <- NULL
+colnames(pga_data) <- c("Player_name", "Player_Age", "Average_Drive", "Driving_Accuracy", "Greens_on_reg", 
+                        "Average_number_putts", "Save_Percent", "Money_Rank",
+                        "Number_events", "Total_Winnings", "Average_Winnings")
+head(pga_data)
+
+colSums(is.na(pga_data))
+pga_data_clean <- na.omit(pga_data)
+
+ggplot(pga_data_clean, aes(x = Average_Drive, y = Average_Winnings)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "green") +
+  labs(title = "Scatter Plot of Average Drive vs. Average Winnings", x = "Average Drive", y = "Average Winnings")
+str(pga_data_clean)
+remove_low_drives <- function(pga_data_clean) {
+  filtered_data <- pga_data_clean %>%
+    filter(Average_Drive >= 150)
+  
+  return(filtered_data)
+}
+
+# Example usage
+pga_data_filtered <- remove_low_drives(pga_data_clean)
+ggplot(pga_data_filtered, aes(x = Average_Drive, y = Average_Winnings)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "green") +
+  labs(
+    title = "Scatter Plot of Average Drive vs. Average Winnings (Filtered)",
+    x = "Average Drive",
+    y = "Average Winnings"
+  ) +
+  theme_minimal() 
+
+pga_data_filtered$Age_Above_30 <- pga_data_filtered$Player_Age > 30
+
+head(pga_data_filtered$Age_Above_30)
+pga_data_filtered <- pga_data_filtered %>% select(-Player_name, -Driving_Accuracy, -Total_Winnings, -Average_number_putts, -Money_Rank, -Player_Age)
+kable(head(pga_data_filtered))
+
+
+# Standardizing Average_Winnings using z-scores
+pga_data_filtered$Standardized_Winnings <- scale(pga_data_filtered$Average_Winnings)
+
+# Updating the multiple regression model with standardized winnings
+full.model <- lm(Standardized_Winnings ~ Average_Drive + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, 
+                          data = pga_data_filtered)
+
+
+colnames(pga_data_filtered)
+kable(summary(full.model)$coef, caption ="Statistics of Regression Coefficients")
+
+par(mfrow=c(2,2))
+plot(full.model)
+
+vif(full.model)
+barplot(vif(full.model), main = "VIF Values", horiz = FALSE, col = "steelblue")
+
+```
+
+
+```{r echo=FALSE}
+par(pty = "s", mfrow = c(2, 2), oma=c(.1,.1,.1,.1), mar=c(4, 0, 2, 0))
+##
+boxcox(Average_Winnings ~ log(Average_Drive) + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered, lambda = seq(-1, 1, length = 10), 
+       xlab=expression(paste(lambda, ": log Average Drive")))
+##
+boxcox(Average_Winnings ~ Average_Drive + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered, lambda = seq(-1, 1, length = 10), 
+       xlab=expression(paste(lambda, ": Average Drive")))
+##
+boxcox((Average_Winnings)^0.5 ~ Average_Drive + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered, lambda = seq(-1, 1, length = 10), 
+       xlab=expression(paste(lambda, ": square root win")))
+##
+boxcox(Average_Winnings ~ log(Average_Drive) + Greens_on_reg +  Save_Percent + Number_events + log(1+Age_Above_30), data = pga_data_filtered, lambda = seq(-1, 1, length = 10), 
+      xlab=expression(paste(lambda, ": log-age, log Average Drive")))
+
+```
+
+---
+
+## Log Transformation Model
+
+
+- Response variable – log (Average Winnings)
+- Explanatory Variables – Average Drive, Greens on Regulation, Save Percentage, Number of Events, and Age Above 30
+
+```{r echo=FALSE}
+log.winnings = lm(log(Average_Winnings) ~ Average_Drive + Greens_on_reg +  Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered)
+kable(summary(log.winnings)$coef, digits = 3)
+
+```
+
+---
+
+## Goodness of Fit Measures
+
+- Improvement in constant variance
+- Improvement in Normality
+
+```{r echo=FALSE}
+par(mfrow = c(1,3))
+plot(log.winnings)
+
+```
+
+---
+
+## Comparison of Models
+
+- Log model outperforms linear model 
+- SSE signifies better fit
+- R squared and R adjusted better in log model
+
+```{r include=FALSE}
+select=function(m){ 
+ e = m$resid                           
+ n0 = length(e)                        
+ SSE=(m$df)*(summary(m)$sigma)^2       
+ R.sq=summary(m)$r.squared             
+ R.adj=summary(m)$adj.r               
+ MSE=(summary(m)$sigma)^2              
+ Cp=(SSE/MSE)-(n0-2*(n0-m$df))         
+ AIC=n0*log(SSE)-n0*log(n0)+2*(n0-m$df)          
+ SBC=n0*log(SSE)-n0*log(n0)+(log(n0))*(n0-m$df)  
+ X=model.matrix(m)                     
+ H=X%*%solve(t(X)%*%X)%*%t(X)          
+ d=e/(1-diag(H))                       
+ PRESS=t(d)%*%d   
+ tbl = as.data.frame(cbind(SSE=SSE, R.sq=R.sq, R.adj = R.adj, Cp = Cp, AIC = AIC, SBC = SBC, PRD = PRESS))
+ names(tbl)=c("SSE", "R.sq", "R.adj", "Cp", "AIC", "SBC", "PRESS")
+ tbl
+ }
+
+```
+
+```{r echo=FALSE}
+output.sum = rbind(select(full.model), select(log.winnings))
+row.names(output.sum) = c("full.model", "log.winnings")
+kable(output.sum, digits=3)
+
+```
+
+---
+
+## Comparison of Models Cont.
+
+- Vast improvement in Log transformation model
+- Normality?
+
+```{r echo=FALSE}
+
+par(pty = "s", mfrow = c(1, 2), mar = c(4, 4, 2, 1), oma = c(1, 1, 1, 1), cex.main = 1.2)
+
+qqnorm(full.model$residuals, main = "Full Model Residuals")
+qqline(full.model$residuals)
+
+qqnorm(log.winnings$residuals, main = "Log Winnings Residuals")
+qqline(log.winnings$residuals)
+
+
+```
+
+---
+
+## Comparison of Model Cont.
+
+- Residuals vs. Fitted improvement in log transformation
+- Can assume constant variance
+
+```{r echo=FALSE}
+par(mfrow = c(1, 2))
+
+plot(full.model$fitted.values, sqrt(abs(full.model$residuals)), 
+     main = "Linear Model Scale-Location", xlab = "Fitted Values", ylab = "√|Residuals|")
+lines(lowess(full.model$fitted.values, sqrt(abs(full.model$residuals))), col = "red", lwd = 2)
+
+plot(log.winnings$fitted.values, sqrt(abs(log.winnings$residuals)), 
+     main = "Log Model Scale-Location", xlab = "Fitted Values", ylab = "√|Residuals|")
+lines(lowess(log.winnings$fitted.values, sqrt(abs(log.winnings$residuals))), col = "red", lwd = 2)
+
+```
+---
+## 
+
+<div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 50px;">
+  Bootstrapping
+</div>
+---
+## Bootstrapping
+
+<div style="font-size: 26px; line-height: 2;">
+
+<ul style="margin-top: 15px; margin-bottom: 15px;">
+
+  <li>Have not assumed normality in our QQ plot.</li>  
+  
+  <li>Uses a nonparametric model for comparison.</li>  
+  
+  <li>Estimating confidence intervals.</li>  
+
+</ul>
+
+</div>
+
+---
+## Boostrapping Cont. with Cases
+
+- The red line in the curves is used to show the p-values and uses the estimated regression coefficients and their corresponding standard error in the output of the regression procedure
+- The blue curve is used to used to show the bootstrap CI which is based on a non-parametric data-driven estimate of the density of bootstrap sampling distribution
+- All appear to be normal
+
+```{r echo=FALSE}
+
+log.winnings = lm(log(Average_Winnings) ~ Average_Drive + Greens_on_reg + Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered)
+
+B = 1000  #
+
+num.p = length(coef(log.winnings))  # number of parameters in the model (includes intercept)
+smpl.n = nrow(pga_data_filtered)       # sample size
+
+# Matrix to store bootstrap coefficients
+coef.mtrx = matrix(0, nrow = B, ncol = num.p)
+
+# Bootstrap loop
+for (i in 1:B) {
+  bootc.id = sample(1:smpl.n, smpl.n, replace = TRUE)  # Resample with replacement
+  boot_data = pga_data_filtered[bootc.id, ]  # Create the bootstrap sample
+  log.winnings.btc = lm(log(Average_Winnings) ~ Average_Drive + Greens_on_reg + Save_Percent + Number_events + Age_Above_30, data = boot_data)
+  coef.mtrx[i, ] = coef(log.winnings.btc)  # Store the coefficients
+}
+
+boot.hist = function(cmtrx, bt.coef.mtrx, var.id, var.nm){
+
+  x1.1 <- seq(min(bt.coef.mtrx[,var.id]), max(bt.coef.mtrx[,var.id]), length=300 )
+  y1.1 <- dnorm(x1.1, mean(bt.coef.mtrx[,var.id]), sd(bt.coef.mtrx[,var.id]))
+
+  highestbar = max(hist(bt.coef.mtrx[,var.id], plot = FALSE)$density) 
+  ylimit <- max(c(y1.1,highestbar))
+  hist(bt.coef.mtrx[,var.id], probability = TRUE, main = var.nm, xlab="", 
+       col = "azure1",ylim=c(0,ylimit), border="lightseagreen")
+  lines(x = x1.1, y = y1.1, col = "red3")
+  lines(density(bt.coef.mtrx[,var.id], adjust=2), col="blue") 
+  
+}
+
+par(mfrow=c(2,3), mar=c(5, 4, 4, 1), cex.main=1, cex.lab=0.9, cex.axis=0.8)
+
+# Create your plots
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=1, var.nm ="Intercept" )
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=2, var.nm ="Average Drive" )
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=3, var.nm ="Greens On Regulation" )
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=4, var.nm ="Save Percentage" )
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=5, var.nm ="Number of Events" )
+boot.hist(bt.coef.mtrx=coef.mtrx, var.id=6, var.nm ="Age Above 30" )
+
+
+
+```
+---
+## Bootstrapping Cont. with Residuals
+
+- The red line in the curves is used to show the p-values and uses the estimated regression coefficients and their corresponding standard error in the output of the regression procedure
+- The blue curve is used to used to show the bootstrap CI which is based on a non-parametric data-driven estimate of the density of bootstrap sampling distribution
+- Same output as cases
+
+```{r include=FALSE}
+
+num.p = dim(coef.mtrx)[2]  
+
+btc.ci = NULL
+btc.wd = NULL
+
+for (i in 1:num.p) {
+  lci.025 = round(quantile(coef.mtrx[, i], 0.025, type = 2), 8)
+  uci.975 = round(quantile(coef.mtrx[, i], 0.975, type = 2), 8)
+  btc.wd[i] = uci.975 - lci.025
+  btc.ci[i] = paste("[", round(lci.025, 4), ", ", round(uci.975, 4), "]")
+}
+
+mean.coefs = apply(coef.mtrx, 2, mean)
+
+results = as.data.frame(cbind(Mean_Coef = formatC(mean.coefs, 4, format = "f"), btc.ci.95 = btc.ci))
+
+kable(results, caption = "Regression Coefficient Matrix with Bootstrap Confidence Intervals")
+
+log.winnings <- lm(log(Average_Winnings) ~ Average_Drive + Greens_on_reg + Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered)
+model.resid = log.winnings$residuals
+B=1000
+num.p = dim(model.matrix(log.winnings))[2]   
+samp.n = dim(model.matrix(log.winnings))[1]  
+btr.mtrx = matrix(rep(0,6*B), ncol=num.p)
+for (i in 1:B){
+
+  bt.lg.winnings = log.winnings$fitted.values + 
+        sample(log.winnings$residuals, samp.n, replace = TRUE)  
+  
+  pga_data_filtered$bt.lg.winnings =  bt.lg.winnings   #  send the boot response to the data
+  btr.model = lm(bt.lg.winnings ~ Average_Drive + Greens_on_reg + Save_Percent + Number_events + Age_Above_30, data = pga_data_filtered)  
+  btr.mtrx[i,]=btr.model$coefficients
+}
+boot.hist = function(bt.coef.mtrx, var.id, var.nm){
+
+  x1.1 <- seq(min(bt.coef.mtrx[,var.id]), max(bt.coef.mtrx[,var.id]), length=300 )
+  y1.1 <- dnorm(x1.1, mean(bt.coef.mtrx[,var.id]), sd(bt.coef.mtrx[,var.id]))
+
+  highestbar = max(hist(bt.coef.mtrx[,var.id], plot = FALSE)$density) 
+  ylimit <- max(c(y1.1,highestbar))
+  hist(bt.coef.mtrx[,var.id], probability = TRUE, main = var.nm, xlab="", 
+       col = "azure1",ylim=c(0,ylimit), border="lightseagreen")
+  lines(x = x1.1, y = y1.1, col = "red3")             
+  lines(density(bt.coef.mtrx[,var.id], adjust=2), col="blue")    
+} 
+
+
+
+```
+
+```{r echo=FALSE}
+par(mfrow=c(2,3))  
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=1, var.nm ="Intercept" )
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=2, var.nm ="Average Drive" )
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=3, var.nm ="Greens on Regulation" )
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=4, var.nm ="Save Percentage" )
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=5, var.nm ="Number of Events" )
+boot.hist(bt.coef.mtrx=btr.mtrx, var.id=6, var.nm ="Age" )
+
+
+```
+---
+## Bootstrapping Cont. CIs
+
+- CIs match our p-values
+- Violation in two variables
+
+```{r include=FALSE}
+# Make sure the bootstrap results and summary are calculated before this chunk
+num.p = dim(btr.mtrx)[2]  
+
+# Calculate bootstrap confidence intervals for residuals
+btr.ci = NULL
+btr.wd = NULL
+
+for (i in 1:num.p) {
+  lci.025 = round(quantile(btr.mtrx[, i], 0.025, type = 2), 8)
+  uci.975 = round(quantile(btr.mtrx[, i], 0.975, type = 2), 8)
+  btr.wd[i] = uci.975 - lci.025
+  btr.ci[i] = paste("[", round(lci.025, 4), ", ", round(uci.975, 4), "]")
+}
+
+# Create a summary table of coefficients with the bootstrap CIs
+kable(as.data.frame(cbind(formatC(btr.mtrx[1, ], 4, format = "f"), btr.ci.95 = btr.ci)), 
+      caption = "Regression Coefficient Matrix with 95% Residual Bootstrap CI")
+```
+
+```{r echo=FALSE}
+# Summarize the coefficients with the CIs and p-values for final output
+p_values <- summary(log.winnings)$coefficients[-3, 4]  
+
+combined_matrix <- cbind(
+  Coefficients = formatC(coef(log.winnings)[-3], 4, format = "f"),  
+  `95% CI (Bootstrap t)` = btc.ci,                                
+  `95% CI (Bootstrap r)` = btr.ci,                                 
+  `p-values` = formatC(p_values, 4, format = "f")                  
+)
+
+library(knitr)
+kable(as.data.frame(combined_matrix), 
+      caption = "Final Combined Inferential Statistics: Coefficients, p-values, and Bootstrap CIs", digits = 3)
+```
+---
+## Model Selection
+
+<div style="font-size: 26px; line-height: 1.5;">
+
+<ul style="margin-top: 15px; margin-bottom: 15px;">
+
+  <li><u>Log Transformation</u>  
+      <br> - Positives: Can assume normality and constant variance, best R-squared and adjusted R-squared values.  
+      <br> - Negatives: Age and Average Drive are insignificant.</li>
+  
+  <li><u>Linear Model</u>  
+      <br> - Positives: Only Age is insignificant, and the model is simple.  
+      <br> - Negatives: Cannot assume constant variance or normality.</li>
+
+</ul>
+
+</div>
+
+---
+## 
+
+<div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 50px;">
+  Conclusion
+</div>
+
+---
+## Conclusion
+
+<div style="font-size: 26px; line-height: 2;">
+
+<ul style="margin-top: 15px; margin-bottom: 15px;">
+  
+  <li>Greens on Regulation is the biggest indicator of increase in Winnings 21.18%.</li>
+  
+  <li>When holding all other variables constant, an increase of one unit in Average Drive leads to a 0.58% increase in Average Winnings.</li>
+  
+  <li>Short game (e.g., greens on regulation or save percent) has a larger impact on winnings compared to the long game. <br>
+      - Short game impact:5.8% <br>
+      - Long game (Average Drive) impact: 0.58%</li>
+  
+  <li>Number of Events decreases Average Winnings by 4.4%.</li>
+
+</ul>
+
+</div>
+
+
+---
+## Limitations
+
+<div style="font-size: 26px; line-height: 2;">
+
+<ul style="margin-top: 15px; margin-bottom: 15px;">
+
+  <li>Average Drive and Age are insignificant values.</li>  
+  
+  <li>Log transformation is sensitive to outliers and could amplify small values.</li>  
+  
+  <li>Assumes a linear relationship.</li>  
+  
+  <li>Factors such as injury, weather, start time, and mental focus are not included in this dataset.</li>  
+
+</ul>
+
+</div>
+
+---
+## 
+
+<div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 50px;">
+  Questions?
+</div>
+
+---
+## Works Cited
+
+<div style="font-size: 35px; line-height: 1.5;">
+
+<ul style="margin-top: 15px; margin-bottom: 15px;">
+
+  <li>Datasets. (n.d.). <a href="https://users.stat.ufl.edu/~winner/datasets.html">https://users.stat.ufl.edu/~winner/datasets.html</a></li>  
+
+</ul>
+
+</div>
+
+---
+## 
+
+<style>
+  section {
+    background-color: #A9D1D6;
+    height: 100%;
+  }
+</style>
+
+<div style="display: flex; justify-content: center; align-items: center; height: 100%; font-size: 50px;">
+  Thank You!
+</div>
+
+---
+## Slide Contributors
+
+<style>
+  section {
+    background-color: #D1E2FF;
+    height: 100%;
+  }
+</style>
+
+<div style="font-size: 40px; line-height: 2;">
+  <ul>
+    <li>Ryan Lebo did slides from the Introduction to the Linear Regression Model</li>
+    <li>Tyler Battaglini did the Box-Cox Transformation to the Conclusion</li>
+  </ul>
+</div>
